@@ -38,7 +38,7 @@ import QualityAssurance from "./pages/services/QualityAssurance";
 import RegulatoryAffairs from "./pages/services/RegulatoryAffairs";
 import ServicesPage from "./pages/Services";
 // Custom Pages
-import TabletListing from "./pages/TabletListing";
+// import TabletListing from "./pages/TabletListing";
 // Support Pages
 import Help from "./pages/Help";
 import PatientAssistancePage from "./pages/PatientAssistance";
@@ -91,7 +91,7 @@ const App = () => (
           <Route path="/contact" element={<Contact />} />
           <Route path="/investors" element={<Investors />} />
           <Route path="/tablets" element={<TabletsPage />} />
-          <Route path="/tablets/listing" element={<TabletListing />} />
+         {/*  <Route path="/tablets/listing" element={<TabletListing />} /> */}
           <Route path="/request-quote" element={<RequestQuote />} />
           {/* Support Pages */}
           <Route path="/help" element={<Help />} />
