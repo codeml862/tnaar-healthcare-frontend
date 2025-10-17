@@ -14,15 +14,26 @@ type Tablet = {
 };
 
 // Create an API client for tablets
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const apiUrl = (path: string) => `${API_BASE}${path}`;
+
+async function parseJsonSafely(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Unexpected response (status ${response.status}). Expected JSON but got: ${text.slice(0, 120)}...`);
+  }
+  return response.json();
+}
 const tabletsClient = {
   // Get all tablets
   getTablets: async (): Promise<Tablet[]> => {
     try {
-      const response = await fetch('/api/tablets');
+      const response = await fetch(apiUrl('/api/tablets'));
       if (!response.ok) {
         throw new Error(`Failed to fetch tablets: ${response.status} ${response.statusText}`);
       }
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       return data.tablets || data;
     } catch (error) {
       console.error('Error fetching tablets:', error);
@@ -75,7 +86,7 @@ const TabletViewer = ({ tablets, refreshKey = 0 }: TabletViewerProps) => {
     };
 
     fetchTablets();
-  }, [tablets, refreshKey]);
+  }, [tablets, refreshKey, toast]);
 
   const displayTablets = tablets || localTablets;
 

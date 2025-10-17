@@ -1,4 +1,4 @@
-import { useState, FormEvent, ChangeEvent, useEffect } from 'react';
+import { useState, FormEvent, ChangeEvent, useEffect, useCallback } from 'react';
 import { Pill, Trash2, Edit3, Plus, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,26 +14,38 @@ type Tablet = {
 };
 
 // Create an API client for tablets
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '';
+const apiUrl = (path: string) => `${API_BASE}${path}`;
+
+async function parseJsonSafely(response: Response) {
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await response.text();
+    throw new Error(`Unexpected response (status ${response.status}). Expected JSON but got: ${text.slice(0, 120)}...`);
+  }
+  return response.json();
+}
 const tabletsClient = {
   // Get all tablets
   getTablets: async (): Promise<Tablet[]> => {
     try {
-      const response = await fetch('/api/tablets');
+      const response = await fetch(apiUrl('/api/tablets'));
       if (!response.ok) {
         throw new Error(`Failed to fetch tablets: ${response.status} ${response.statusText}`);
       }
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       return data.tablets || data;
     } catch (error) {
       console.error('Error fetching tablets:', error);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Unknown error fetching tablets';
+      throw new Error(message);
     }
   },
 
   // Create a new tablet
   createTablet: async (tabletData: Omit<Tablet, 'id' | 'createdAt' | 'updatedAt'>): Promise<Tablet> => {
     try {
-      const response = await fetch('/api/tablets', {
+      const response = await fetch(apiUrl('/api/tablets'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,18 +58,19 @@ const tabletsClient = {
         throw new Error(errorData.error || `Failed to create tablet: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       return data.tablet || data;
     } catch (error) {
       console.error('Error creating tablet:', error);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Unknown error creating tablet';
+      throw new Error(message);
     }
   },
 
   // Update an existing tablet
   updateTablet: async (id: string, tabletData: Partial<Omit<Tablet, 'id' | 'createdAt' | 'updatedAt'>>): Promise<Tablet> => {
     try {
-      const response = await fetch(`/api/tablets/${id}`, {
+      const response = await fetch(apiUrl(`/api/tablets/${id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -70,18 +83,19 @@ const tabletsClient = {
         throw new Error(errorData.error || `Failed to update tablet: ${response.status} ${response.statusText}`);
       }
       
-      const data = await response.json();
+      const data = await parseJsonSafely(response);
       return data.tablet || data;
     } catch (error) {
       console.error('Error updating tablet:', error);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Unknown error updating tablet';
+      throw new Error(message);
     }
   },
 
   // Delete a tablet
   deleteTablet: async (id: string): Promise<void> => {
     try {
-      const response = await fetch(`/api/tablets/${id}`, {
+      const response = await fetch(apiUrl(`/api/tablets/${id}`), {
         method: 'DELETE',
       });
       
@@ -91,7 +105,8 @@ const tabletsClient = {
       }
     } catch (error) {
       console.error('Error deleting tablet:', error);
-      throw error;
+      const message = error instanceof Error ? error.message : 'Unknown error deleting tablet';
+      throw new Error(message);
     }
   }
 };
@@ -228,12 +243,12 @@ function TabletForm({
       }
 
       onSubmit(tablet);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Tablet operation error:', error);
       toast({
         variant: "destructive",
         title: "Error",
-        description: error.message || `Failed to ${editingTablet ? 'update' : 'add'} tablet. Please try again.`,
+        description: (error instanceof Error ? error.message : `Failed to ${editingTablet ? 'update' : 'add'} tablet. Please try again.`),
       });
     } finally {
       setIsSubmitting(false);
@@ -373,20 +388,16 @@ function TabletList({ onEdit, refreshTrigger }: { onEdit: (tablet: Tablet) => vo
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchTablets();
-  }, [refreshTrigger]);
-
-  const fetchTablets = async () => {
+  const fetchTablets = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await getTablets();
       setTablets(data);
       setError(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to fetch tablets:', error);
-      const errorMessage = error.message || "Failed to load tablets. Please try again.";
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load tablets. Please try again.';
       setError(errorMessage);
       toast({
         variant: "destructive",
@@ -396,7 +407,13 @@ function TabletList({ onEdit, refreshTrigger }: { onEdit: (tablet: Tablet) => vo
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchTablets();
+  }, [fetchTablets, refreshTrigger]);
+
+  
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete "${name}"?`)) {
@@ -410,9 +427,9 @@ function TabletList({ onEdit, refreshTrigger }: { onEdit: (tablet: Tablet) => vo
         title: "Success",
         description: `Tablet "${name}" deleted successfully!`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to delete tablet:', error);
-      const errorMessage = error.message || "Failed to delete tablet. Please try again.";
+      const errorMessage = error instanceof Error ? error.message : "Failed to delete tablet. Please try again.";
       toast({
         variant: "destructive",
         title: "Error",
@@ -579,15 +596,15 @@ export default function TabletsManager() {
     setShowForm(false);
     
     // Call global refresh functions if they exist
-    // @ts-ignore
+    // @ts-expect-error Optional global callback if present at runtime
     if (typeof window.refreshTablets === 'function') {
-      // @ts-ignore
+      // @ts-expect-error Optional global callback if present at runtime
       window.refreshTablets();
     }
     
-    // @ts-ignore
+    // @ts-expect-error Optional global callback if present at runtime
     if (typeof window.refreshTabletListing === 'function') {
-      // @ts-ignore
+      // @ts-expect-error Optional global callback if present at runtime
       window.refreshTabletListing();
     }
     
